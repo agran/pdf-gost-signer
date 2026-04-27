@@ -69,7 +69,7 @@
 
 - КриптоПро CSP (≥ 4.0)
 - [CryptoPro Extension for CAdES Browser Plug-in](https://docs.cryptopro.ru/cades/plugin/plugin-installation-windows)
-- Файл `cadesplugin_api.js` в той же директории
+- Файл `cadesplugin_api.js` в той же директории — входит в состав расширения КриптоПро, **права принадлежат ООО «КРИПТО-ПРО»**
 - HTTPS или `localhost` (HTTP не работает для доступа к плагину)
 - Домен добавлен в разрешения расширения
 
