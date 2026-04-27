@@ -1,0 +1,1075 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Подпись PDF | ГОСТ КЭП</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #f0f2f5;
+  color: #1a1a2e;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.header {
+  background: #16213e;
+  color: #fff;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.header h1 { font-size: 20px; font-weight: 600; }
+.header .badge {
+  background: #0f3460;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+.container {
+  max-width: 720px;
+  margin: 24px auto;
+  padding: 0 16px;
+  width: 100%;
+}
+.card {
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  padding: 24px;
+  margin-bottom: 16px;
+}
+.card-header {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.step-num {
+  background: #16213e;
+  color: #fff;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.plugin-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+.plugin-status.ok { background: #e8f5e9; color: #2e7d32; }
+.plugin-status.err { background: #ffebee; color: #c62828; }
+.plugin-status.warn { background: #fff3e0; color: #e65100; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dot.green { background: #4caf50; }
+.dot.red { background: #f44336; }
+.dot.orange { background: #ff9800; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .2s, opacity .2s;
+}
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary { background: #16213e; color: #fff; }
+.btn-primary:hover:not(:disabled) { background: #1a1a4e; }
+.btn-outline { background: #fff; color: #16213e; border: 1.5px solid #16213e; }
+.btn-outline:hover:not(:disabled) { background: #f0f2f5; }
+.btn-danger { background: #c62828; color: #fff; }
+.btn-danger:hover:not(:disabled) { background: #b71c1c; }
+.btn-sm { padding: 6px 14px; font-size: 13px; }
+
+select, input[type=file] { font-size: 14px; }
+select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1.5px solid #d0d5dd;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+select:focus { outline: none; border-color: #16213e; }
+
+.upload-zone {
+  border: 2px dashed #c0c5ce;
+  border-radius: 10px;
+  padding: 32px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .2s, background .2s;
+}
+.upload-zone:hover, .upload-zone.dragover {
+  border-color: #16213e;
+  background: #f8f9fc;
+}
+.upload-zone.has-file { border-style: solid; border-color: #4caf50; background: #f1f8e9; }
+.upload-icon { font-size: 40px; margin-bottom: 8px; }
+.upload-text { font-size: 14px; color: #666; }
+.upload-text strong { color: #16213e; }
+.file-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: #f0f2f5;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.file-info .name { font-weight: 500; word-break: break-all; }
+.file-info .size { color: #888; white-space: nowrap; }
+
+.pdf-preview {
+  margin-top: 16px;
+  text-align: center;
+  position: relative;
+  display: inline-block;
+}
+.pdf-preview canvas {
+  max-width: 100%;
+  border: 1px solid #d0d5dd;
+  border-radius: 4px;
+  display: block;
+}
+.sig-overlay {
+  position: absolute;
+  background: rgba(255,255,255,0.55);
+  border: 2px dashed #16213e;
+  border-radius: 6px;
+  cursor: move;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  user-select: none;
+  min-width: 80px;
+  min-height: 36px;
+}
+.sig-overlay .sig-label {
+  font-size: 10px;
+  color: #16213e;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1.25;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+.sig-overlay .sig-coords {
+  font-size: 9px;
+  color: #555;
+  margin-top: 2px;
+}
+
+.progress-bar {
+  height: 6px;
+  background: #e0e0e0;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-top: 12px;
+}
+.progress-fill {
+  height: 100%;
+  background: #16213e;
+  border-radius: 3px;
+  transition: width .3s;
+  width: 0;
+}
+
+.result-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+}
+.result-item:last-child { border-bottom: none; }
+.result-name { font-weight: 500; font-size: 14px; }
+.result-desc { font-size: 12px; color: #888; }
+
+.cert-details {
+  font-size: 13px;
+  color: #555;
+  margin-top: 8px;
+  line-height: 1.6;
+}
+.cert-details span { color: #1a1a2e; font-weight: 500; }
+
+.logo-status {
+  font-size: 13px;
+  color: #555;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.logo-status .logo-name { font-weight: 500; color: #1a1a2e; }
+.logo-status .logo-tag { font-size: 11px; padding: 1px 6px; border-radius: 3px; font-weight: 500; }
+.logo-status .logo-tag.auto { background: #e3f2fd; color: #1565c0; }
+.logo-status .logo-tag.manual { background: #fff3e0; color: #e65100; }
+
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: #16213e;
+  color: #fff;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  z-index: 1000;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: all .3s;
+  pointer-events: none;
+  max-width: 520px;
+  white-space: pre-line;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.err { background: #c62828; }
+
+.spinner {
+  display: inline-block;
+  width: 16px; height: 16px;
+  border: 2px solid #ccc;
+  border-top-color: #16213e;
+  border-radius: 50%;
+  animation: spin .6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Подпись PDF</h1>
+  <span class="badge">ГОСТ Р 34.10-2012</span>
+  <span class="badge" style="background:#b71c1c">Требуется КриптоПро ЭЦП</span>
+</div>
+
+<div class="container">
+
+  <div class="card" id="step1">
+    <div class="card-header"><span class="step-num">1</span> Проверить плагин</div>
+    <div id="pluginStatus" class="plugin-status warn">
+      <span class="dot orange"></span> Проверка плагина КриптоПро ЭЦП...
+    </div>
+    <div id="pluginAction" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card" id="step2" style="display:none">
+    <div class="card-header"><span class="step-num">2</span> Выбрать сертификат</div>
+    <div id="certLoader" style="margin-bottom:12px">
+      <button class="btn btn-primary" onclick="App.loadCertificates()">
+        Загрузить список сертификатов
+      </button>
+    </div>
+    <div id="certList" style="display:none">
+      <select id="certSelect" onchange="App.onCertChange()"></select>
+      <div id="certInfo" class="cert-details" style="display:none"></div>
+    </div>
+  </div>
+
+  <div class="card" id="step3" style="display:none">
+    <div class="card-header"><span class="step-num">3</span> Загрузить документ</div>
+    <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <div class="upload-icon">&#128196;</div>
+      <div class="upload-text">
+        <strong>Выберите файл</strong> или перетащите его сюда<br>
+        PDF до 32 МБ
+      </div>
+    </div>
+    <input type="file" id="fileInput" accept=".pdf" style="display:none" onchange="App.onFileSelect(event)">
+    <div id="fileInfo" style="display:none"></div>
+    <div id="pdfPreview" class="pdf-preview" style="display:none"><canvas id="pdfCanvas"></canvas></div>
+  </div>
+
+  <div class="card" id="step4" style="display:none">
+    <div class="card-header"><span class="step-num">4</span> Подписать</div>
+
+    <div id="logoArea" style="margin-bottom:14px">
+      <div class="logo-status" id="logoStatus">
+        <span class="spinner" style="width:14px;height:14px"></span> Загрузка логотипа...
+      </div>
+      <div style="margin-top:6px">
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('logoInput').click()">Выбрать логотип</button>
+        <button class="btn btn-outline btn-sm" id="logoClearBtn" style="display:none;margin-left:8px" onclick="App.clearLogo()">Убрать</button>
+        <input type="file" id="logoInput" accept=".jpg,.jpeg,image/jpeg" style="display:none" onchange="App.onLogoPick(event)">
+      </div>
+      <div style="font-size:11px;color:#888;margin-top:4px">JPEG, до 500 КБ. Логотип встраивается в левый верхний угол печати.</div>
+    </div>
+
+    <button class="btn btn-primary" id="signBtn" style="margin-top:16px" onclick="App.sign()">
+      Подписать
+    </button>
+    <div class="progress-bar" id="progressBar" style="display:none">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+  </div>
+
+  <div class="card" id="step5" style="display:none">
+    <div class="card-header"><span class="step-num">5</span> Результат</div>
+    <div id="resultContent"></div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="cadesplugin_api.js"></script>
+<script src="pades.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+var App = {
+  state: {
+    pluginReady: false,
+    certs: [],
+    selectedCert: null,
+    file: null,
+    fileBase64: '',
+    sigType: 1,
+    signature: '',
+    signing: false
+  },
+
+  init: function() {
+    this._onSigDragMoveBound = this._onSigDragMove.bind(this);
+    this._onSigDragEndBound = this._onSigDragEnd.bind(this);
+    this.checkPlugin();
+    this._preloadLogo();
+    var dz = document.getElementById('dropZone');
+    dz.addEventListener('dragover', function(e) { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', function() { dz.classList.remove('dragover'); });
+    dz.addEventListener('drop', function(e) {
+      e.preventDefault();
+      dz.classList.remove('dragover');
+      var f = e.dataTransfer.files[0];
+      if (f) App.handleFile(f);
+    });
+  },
+
+  _preloadLogo: function() {
+    var self = this;
+    var host = window.location.hostname;
+    var useErudit = host.indexOf('erudit23.ru') !== -1;
+    if (!useErudit) {
+      self.state.logoBytes = null;
+      self.state.logoName = '';
+      self.state.logoSource = 'none';
+      self._updateLogoStatus();
+      return;
+    }
+    fetch('erudit.jpg', { cache: 'force-cache' })
+        .then(function(r) { return r.ok ? r.arrayBuffer() : null; })
+        .then(function(ab) {
+            if (ab) {
+              self.state.logoBytes = new Uint8Array(ab);
+              self.state.logoName = 'erudit.jpg';
+              self.state.logoSource = 'auto';
+            }
+            self._updateLogoStatus();
+        })
+        .catch(function() { self._updateLogoStatus(); });
+  },
+
+  onLogoPick: function(event) {
+    var self = this;
+    var f = event.target.files[0];
+    if (!f) return;
+    if (!f.type.match(/^image\/jpe?g$/i) && !f.name.match(/\.jpe?g$/i)) {
+      this.toast('Поддерживается только JPEG-формат', 'err');
+      return;
+    }
+    if (f.size > 500 * 1024) {
+      this.toast('Файл слишком большой. Максимум 500 КБ', 'err');
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function() {
+      self.state.logoBytes = new Uint8Array(reader.result);
+      self.state.logoName = f.name;
+      self.state.logoSource = 'manual';
+      self._updateLogoStatus();
+    };
+    reader.onerror = function() { self.toast('Не удалось прочитать файл', 'err'); };
+    reader.readAsArrayBuffer(f);
+  },
+
+  clearLogo: function() {
+    this.state.logoBytes = null;
+    this.state.logoName = '';
+    this.state.logoSource = 'none';
+    this._updateLogoStatus();
+    var inp = document.getElementById('logoInput');
+    if (inp) inp.value = '';
+  },
+
+  _updateLogoStatus: function() {
+    var el = document.getElementById('logoStatus');
+    var clearBtn = document.getElementById('logoClearBtn');
+    if (!el) return;
+    var src = this.state.logoSource;
+    if (!src || src === 'none') {
+      el.innerHTML = '<span>Логотип: не выбран</span>';
+      if (clearBtn) clearBtn.style.display = 'none';
+    } else if (src === 'auto') {
+      el.innerHTML = '<span class="logo-name">' + this.escapeHtml(this.state.logoName) + '</span>' +
+        '<span class="logo-tag auto">авто</span>';
+      if (clearBtn) clearBtn.style.display = 'inline-block';
+    } else if (src === 'manual') {
+      el.innerHTML = '<span class="logo-name">' + this.escapeHtml(this.state.logoName) + '</span>' +
+        '<span class="logo-tag manual">выбрано</span>';
+      if (clearBtn) clearBtn.style.display = 'inline-block';
+    }
+  },
+
+  checkPlugin: function() {
+    var self = this;
+    var statusEl = document.getElementById('pluginStatus');
+    var actionEl = document.getElementById('pluginAction');
+    try {
+      if (typeof cadesplugin === 'undefined') {
+        statusEl.className = 'plugin-status err';
+        statusEl.innerHTML = '<span class="dot red"></span> Плагин КриптоПро ЭЦП не обнаружен';
+          actionEl.innerHTML = '<p style="font-size:13px;color:#888">Установите расширение «CryptoPro Extension for CAdES Browser Plug-in» — <a href="https://docs.cryptopro.ru/cades/plugin/plugin-installation-windows?id=%d0%a3%d1%81%d1%82%d0%b0%d0%bd%d0%be%d0%b2%d0%ba%d0%b0-%d1%80%d0%b0%d1%81%d1%88%d0%b8%d1%80%d0%b5%d0%bd%d0%b8%d1%8f-%d0%b1%d1%80%d0%b0%d1%83%d0%b7%d0%b5%d1%80%d0%b0" target="_blank" style="color:#1565c0">инструкция</a>.</p>';
+        return;
+      }
+    } catch(e) {
+      statusEl.className = 'plugin-status err';
+      statusEl.innerHTML = '<span class="dot red"></span> Плагин не обнаружен (ошибка доступа)';
+      actionEl.innerHTML = '<p style="font-size:13px;color:#888;margin-top:8px">Если плагин не установлен — <a href="https://docs.cryptopro.ru/cades/plugin/plugin-installation-windows?id=%d0%a3%d1%81%d1%82%d0%b0%d0%bd%d0%be%d0%b2%d0%ba%d0%b0-%d1%80%d0%b0%d1%81%d1%88%d0%b8%d1%80%d0%b5%d0%bd%d0%b8%d1%8f-%d0%b1%d1%80%d0%b0%d1%83%d0%b7%d0%b5%d1%80%d0%b0" target="_blank" style="color:#1565c0">инструкция по установке</a>.</p>';
+      return;
+    }
+
+    cadesplugin.then(
+      function() {
+        self.state.pluginReady = true;
+        statusEl.className = 'plugin-status ok';
+        statusEl.innerHTML = '<span class="dot green"></span> Плагин готов';
+        actionEl.innerHTML = '<button class="btn btn-outline btn-sm" onclick="App.aboutPlugin()">О плагине</button>';
+        self.showStep(2);
+        self._loadPluginVersion(statusEl);
+        self.loadCertificates();
+      },
+      function(err) {
+        statusEl.className = 'plugin-status err';
+        statusEl.innerHTML = '<span class="dot red"></span> Ошибка инициализации плагина';
+        actionEl.innerHTML = '<p style="font-size:13px;color:#c62828">' + self.escapeHtml(String(err)) + '</p>' +
+          '<p style="font-size:13px;color:#888;margin-top:8px">Если плагин не установлен — <a href="https://docs.cryptopro.ru/cades/plugin/plugin-installation-windows?id=%d0%a3%d1%81%d1%82%d0%b0%d0%bd%d0%be%d0%b2%d0%ba%d0%b0-%d1%80%d0%b0%d1%81%d1%88%d0%b8%d1%80%d0%b5%d0%bd%d0%b8%d1%8f-%d0%b1%d1%80%d0%b0%d1%83%d0%b7%d0%b5%d1%80%d0%b0" target="_blank" style="color:#1565c0">инструкция по установке</a>.</p>';
+      }
+    );
+  },
+
+  _loadPluginVersion: function(statusEl) {
+    var self = this;
+    cadesplugin.async_spawn(function*() {
+      try {
+        var oAbout = yield cadesplugin.CreateObjectAsync("CAdESCOM.About");
+        var pluginVersion = yield oAbout.PluginVersion;
+        var version = pluginVersion ? (yield pluginVersion.toString()) : (yield oAbout.Version);
+        var cspVersion = '';
+        try {
+          var csp = yield oAbout.CSPVersion();
+          cspVersion = yield csp.toString();
+        } catch(e) {}
+        self.state.pluginVersion = version;
+        self.state.cspVersion = cspVersion;
+        statusEl.innerHTML = '<span class="dot green"></span> Плагин готов. Версия: ' + self.escapeHtml(version) +
+          (cspVersion ? ' · CSP: ' + self.escapeHtml(cspVersion) : '');
+      } catch(e) {}
+    });
+  },
+
+  aboutPlugin: function() {
+    var info = [
+      'Плагин КриптоПро ЭЦП: ' + (this.state.pluginVersion || 'н/д'),
+      'КриптоПро CSP: ' + (this.state.cspVersion || 'н/д')
+    ];
+    alert(info.join('\n'));
+  },
+
+  loadCertificates: function() {
+    var self = this;
+    document.getElementById('certLoader').innerHTML = '<span class="spinner"></span> Загрузка сертификатов...';
+    this._certsAsync(function*(args) {
+      try {
+        var oStore = yield cadesplugin.CreateObjectAsync("CAdESCOM.Store");
+        yield oStore.Open(2);
+        var certs = yield oStore.Certificates;
+        var count = yield certs.Count;
+        var list = [];
+        for (var i = 1; i <= count; i++) {
+          var cert = yield certs.Item(i);
+          var hasKey = false;
+          try { hasKey = yield cert.HasPrivateKey(); } catch(e) {}
+          if (!hasKey) continue;
+          var subject = yield cert.SubjectName;
+          var thumbprint = yield cert.Thumbprint;
+          var issuer = yield cert.IssuerName;
+          var validFrom = yield cert.ValidFromDate;
+          var validTo = yield cert.ValidToDate;
+          var serial = '';
+          try { serial = yield cert.SerialNumber; } catch(e) {}
+          list.push({
+            subject: subject,
+            thumbprint: thumbprint,
+            issuer: issuer,
+            validFrom: validFrom,
+            validTo: validTo,
+            serial: serial,
+            cert: cert
+          });
+        }
+        yield oStore.Close();
+        self.state.certs = list;
+        self.renderCertList();
+      } catch(e) {
+        self.toast('Ошибка загрузки сертификатов: ' + self.escapeHtml(String(e)), 'err');
+        document.getElementById('certLoader').innerHTML = '<button class="btn btn-outline btn-sm" onclick="App.loadCertificates()">Повторить</button>';
+      }
+    });
+  },
+
+  _certsAsync: function(gen) {
+    return cadesplugin.async_spawn(gen);
+  },
+
+  renderCertList: function() {
+    var sel = document.getElementById('certSelect');
+    var now = new Date();
+    var list = this.state.certs.filter(function(c) {
+      return new Date(c.validTo) >= now;
+    });
+    this.state.certs = list;
+    sel.innerHTML = '<option value="">-- Выберите сертификат --</option>';
+    if (list.length === 0) {
+      sel.innerHTML = '<option value="">Действующие сертификаты с закрытым ключом не найдены</option>';
+      document.getElementById('certLoader').style.display = 'none';
+      document.getElementById('certList').style.display = 'block';
+      return;
+    }
+    list.sort(function(a, b) { return new Date(b.validTo) - new Date(a.validTo); });
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i];
+      var label = this._parseSubject(c.subject).CN || c.subject;
+      var from = this._formatDate(c.validFrom);
+      var to = this._formatDate(c.validTo);
+      var optLabel = label + '  (' + from + ' — ' + to + ')';
+      sel.innerHTML += '<option value="' + i + '">' + this.escapeHtml(optLabel) + '</option>';
+    }
+    document.getElementById('certLoader').style.display = 'none';
+    document.getElementById('certList').style.display = 'block';
+    sel.value = '0';
+    this.onCertChange();
+  },
+
+  _formatDate: function(d) {
+    if (!d) return '—';
+    var dt = new Date(d);
+    if (isNaN(dt.getTime())) return String(d);
+    var dd = String(dt.getDate()).padStart(2, '0');
+    var mm = String(dt.getMonth() + 1).padStart(2, '0');
+    var yy = dt.getFullYear();
+    return dd + '.' + mm + '.' + yy;
+  },
+
+  onCertChange: function() {
+    var idx = document.getElementById('certSelect').value;
+    var info = document.getElementById('certInfo');
+    if (idx === '') {
+      info.style.display = 'none';
+      this.state.selectedCert = null;
+      return;
+    }
+    var c = this.state.certs[parseInt(idx)];
+    this.state.selectedCert = c;
+    var parsed = this._parseSubject(c.subject);
+    info.style.display = 'block';
+    info.innerHTML =
+      '<div>Владелец: <span>' + this.escapeHtml(parsed.CN || '—') + '</span></div>' +
+      (parsed.O ? '<div>Организация: <span>' + this.escapeHtml(parsed.O) + '</span></div>' : '') +
+      '<div>Издатель: <span>' + this.escapeHtml(this._parseSubject(c.issuer).CN || c.issuer) + '</span></div>' +
+      '<div>Действителен: <span>' + this.escapeHtml(c.validFrom) + ' — ' + this.escapeHtml(c.validTo) + '</span></div>' +
+      '<div style="word-break:break-all">Отпечаток: <span>' + this.escapeHtml(c.thumbprint) + '</span></div>';
+    this.showStep(3);
+  },
+
+  _parseSubject: function(subject) {
+    var result = {};
+    var pairs = subject.split(',');
+    for (var i = 0; i < pairs.length; i++) {
+      var p = pairs[i].trim();
+      var eq = p.indexOf('=');
+      if (eq > 0) {
+        var key = p.substring(0, eq).trim();
+        var val = p.substring(eq + 1).trim();
+        if (val[0] === '"' && val[val.length-1] === '"') val = val.substring(1, val.length-1);
+        result[key] = val;
+      }
+    }
+    return result;
+  },
+
+  onFileSelect: function(event) {
+    var f = event.target.files[0];
+    if (f) this.handleFile(f);
+  },
+
+  handleFile: function(file) {
+    var name = file.name.toLowerCase();
+    if (!name.endsWith('.pdf') && file.type !== 'application/pdf') {
+      this.toast('Поддерживаются только PDF', 'err');
+      return;
+    }
+    if (file.size > 32 * 1024 * 1024) {
+      this.toast('Файл слишком большой. Максимум 32 МБ', 'err');
+      return;
+    }
+    this.state.file = file;
+    this.state.signature = '';
+    document.getElementById('dropZone').classList.add('has-file');
+    document.getElementById('dropZone').querySelector('.upload-text').innerHTML =
+      '<strong>' + this.escapeHtml(file.name) + '</strong><br>' + this._formatSize(file.size);
+    var fi = document.getElementById('fileInfo');
+    fi.style.display = 'block';
+    fi.innerHTML = '<span class="name">' + this.escapeHtml(file.name) + '</span><span class="size">' + this._formatSize(file.size) + '</span>';
+    this.showStep(4);
+    document.getElementById('step5').style.display = 'none';
+    this._renderPdfPreview(file);
+  },
+
+  _renderPdfPreview: function(file) {
+    var self = this;
+    var container = document.getElementById('pdfPreview');
+    container.style.display = 'none';
+    this._clearSigOverlay();
+    var reader = new FileReader();
+    reader.onload = function() {
+      var data = new Uint8Array(reader.result);
+      pdfjsLib.getDocument({ data: data }).promise.then(function(pdf) {
+        pdf.getPage(1).then(function(page) {
+          var canvas = document.getElementById('pdfCanvas');
+          var rawView = page.getViewport({ scale: 1 });
+          var pageW = rawView.width;
+          var pageH = rawView.height;
+          var containerWidth = container.parentElement.clientWidth - 48;
+          var scale = Math.min(containerWidth / rawView.width, 1.5);
+          var viewport = page.getViewport({ scale: scale });
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          self.state.pageW = pageW;
+          self.state.pageH = pageH;
+          self.state.previewScale = scale;
+          page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise.then(function() {
+            container.style.display = 'block';
+            self._createSigOverlay();
+          }).catch(function() {
+            console.warn('Не удалось отрисовать первую страницу PDF');
+          });
+        }).catch(function() {
+          console.warn('Не удалось открыть PDF для превью');
+        });
+      }).catch(function() {
+        console.warn('Не удалось открыть PDF для превью');
+      });
+    };
+    reader.readAsArrayBuffer(file);
+  },
+
+  _clearSigOverlay: function() {
+    var ov = document.querySelector('#pdfPreview .sig-overlay');
+    if (ov) ov.remove();
+    this._sigDragData = null;
+  },
+
+  _createSigOverlay: function() {
+    var pw = this.state.pageW;
+    var ph = this.state.pageH;
+    var scale = this.state.previewScale;
+    var sigW = Math.min(pw - 80, 204);
+    var sigH = 78;
+    var stampX = 40;
+    var stampY = 40;
+    var ow = Math.round(sigW * scale) || 80;
+    var oh = Math.round(sigH * scale) || 36;
+    var canvasH = Math.round(ph * scale);
+    var left = Math.round(stampX * scale);
+    var top = canvasH - Math.round((stampY + sigH) * scale);
+    this.state.stampW = sigW;
+    this.state.stampH = sigH;
+    this.state.stampX = stampX;
+    this.state.stampY = stampY;
+    var container = document.getElementById('pdfPreview');
+    var div = document.createElement('div');
+    div.className = 'sig-overlay';
+    div.style.left = left + 'px';
+    div.style.top = top + 'px';
+    div.style.width = ow + 'px';
+    div.style.height = oh + 'px';
+    div.innerHTML = '<span class="sig-label">Печать<br>подписи</span>';
+    div.addEventListener('mousedown', this._onSigDragStart.bind(this));
+    container.appendChild(div);
+  },
+
+  _onSigDragStart: function(e) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    var overlay = e.currentTarget;
+    this._sigDragData = {
+      el: overlay,
+      startMouseX: e.clientX,
+      startMouseY: e.clientY,
+      startLeft: parseFloat(overlay.style.left),
+      startTop: parseFloat(overlay.style.top)
+    };
+    overlay.style.opacity = '0.8';
+    overlay.style.zIndex = '20';
+    document.addEventListener('mousemove', this._onSigDragMoveBound);
+    document.addEventListener('mouseup', this._onSigDragEndBound);
+  },
+
+  _onSigDragMove: function(e) {
+    if (!this._sigDragData) return;
+    e.preventDefault();
+    var d = this._sigDragData;
+    var canvas = document.getElementById('pdfCanvas');
+    var maxLeft = canvas.width - d.el.offsetWidth;
+    var maxTop = canvas.height - d.el.offsetHeight;
+    var newLeft = Math.max(0, Math.min(d.startLeft + e.clientX - d.startMouseX, maxLeft));
+    var newTop = Math.max(0, Math.min(d.startTop + e.clientY - d.startMouseY, maxTop));
+    d.el.style.left = newLeft + 'px';
+    d.el.style.top = newTop + 'px';
+    var scale = this.state.previewScale;
+    var sigH = this.state.stampH;
+    this.state.stampX = Math.round(newLeft / scale);
+    this.state.stampY = Math.round((canvas.height - newTop - d.el.offsetHeight) / scale);
+    var label = d.el.querySelector('.sig-label');
+    if (label) label.innerHTML = 'Печать<br>подписи<br><span class="sig-coords">X:' + this.state.stampX + ' Y:' + this.state.stampY + '</span>';
+  },
+
+  _onSigDragEnd: function() {
+    if (!this._sigDragData) return;
+    this._sigDragData.el.style.opacity = '';
+    this._sigDragData.el.style.zIndex = '10';
+    this._sigDragData = null;
+    document.removeEventListener('mousemove', this._onSigDragMoveBound);
+    document.removeEventListener('mouseup', this._onSigDragEndBound);
+    var label = document.querySelector('#pdfPreview .sig-label');
+    if (label) label.innerHTML = 'Печать<br>подписи';
+  },
+
+  sign: function() {
+    var self = this;
+    if (this.state.signing) return;
+    if (!this.state.file) { this.toast('Сначала выберите файл', 'err'); return; }
+    if (!this.state.selectedCert) { this.toast('Сначала выберите сертификат', 'err'); return; }
+
+    this.state.signing = true;
+    var btn = document.getElementById('signBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Подписание...';
+    var pbar = document.getElementById('progressBar');
+    var pfill = document.getElementById('progressFill');
+    pbar.style.display = 'block';
+    pfill.style.width = '0%';
+
+    var done = function() {
+      pfill.style.width = '100%';
+      pbar.style.display = 'none';
+      btn.disabled = false;
+      btn.innerHTML = 'Подписать';
+      self.state.signing = false;
+      self.showResult();
+    };
+    var fail = function(err) {
+      pbar.style.display = 'none';
+      btn.disabled = false;
+      btn.innerHTML = 'Подписать';
+      self.state.signing = false;
+      console.error('[sign error]', err);
+      self.toast('Ошибка подписания:\n' + String(err), 'err');
+    };
+
+    pfill.style.width = '10%';
+    var reader = new FileReader();
+    reader.onload = function() {
+        pfill.style.width = '30%';
+        var pdfBytes = new Uint8Array(reader.result);
+        var pdfStr = '';
+        for (var b = 0; b < pdfBytes.length; b++) pdfStr += String.fromCharCode(pdfBytes[b]);
+        var embedder = new PadesJs.PadesEmbedder();
+        var prep;
+        try {
+          prep = embedder.prepareForSigning(
+            pdfStr,
+            self._extractCN(self.state.selectedCert.subject),
+            {
+              logoBytes:  self.state.logoBytes,
+              certSerial: self.state.selectedCert.serial,
+              validFrom:  self.state.selectedCert.validFrom,
+              validTo:    self.state.selectedCert.validTo,
+              stampX:     self.state.stampX,
+              stampY:     self.state.stampY
+            }
+          );
+        } catch(e) { fail('Ошибка сборки PAdES: ' + e.message); return; }
+
+        pfill.style.width = '50%';
+        var dataB64 = btoa(prep.dataToSign);
+        self._doSign(dataB64, self.state.selectedCert, self.state.sigType, function(signature) {
+          try {
+            var signedPdfStr = embedder.finalizeSignature(prep.state, signature);
+            var signedBytes = new Uint8Array(signedPdfStr.length);
+            for (var s = 0; s < signedPdfStr.length; s++) signedBytes[s] = signedPdfStr.charCodeAt(s);
+            self.state.signedPdf = signedBytes;
+            self.state.signature = signature;
+            done();
+          } catch(e2) { fail('Ошибка встраивания: ' + e2.message); }
+        }, fail);
+      };
+      reader.onerror = function() { fail('Не удалось прочитать файл'); };
+      reader.readAsArrayBuffer(self.state.file);
+    },
+
+  _readFileBase64: function(file, done, fail) {
+    var reader = new FileReader();
+    reader.onload = function() {
+      var full = reader.result;
+      var comma = full.indexOf(',');
+      var b64 = comma >= 0 ? full.substring(comma + 1) : full;
+      done(b64.replace(/\s/g, ''));
+    };
+    reader.onerror = function() { fail('Не удалось прочитать файл'); };
+    reader.readAsDataURL(file);
+  },
+
+  _doSign: function(base64content, cert, sigType, done, fail) {
+    var self = this;
+    this._certsAsync(function*(args) {
+      var oStore = null;
+      var attempts = [];
+      try {
+        oStore = yield cadesplugin.CreateObjectAsync("CAdESCOM.Store");
+        yield oStore.Open(
+          cadesplugin.CAPICOM_CURRENT_USER_STORE,
+          cadesplugin.CAPICOM_MY_STORE,
+          cadesplugin.CAPICOM_STORE_OPEN_MAXIMUM_ALLOWED
+        );
+
+        var certs = yield oStore.Certificates;
+        var found = yield certs.Find(cadesplugin.CAPICOM_CERTIFICATE_FIND_SHA1_HASH, cert.thumbprint);
+        var count = yield found.Count;
+        if (count === 0) throw new Error('Сертификат не найден в хранилище (отпечаток: ' + cert.thumbprint + ')');
+        var signCert = yield found.Item(1);
+
+        var oSigner = yield cadesplugin.CreateObjectAsync("CAdESCOM.CPSigner");
+        yield oSigner.propset_Certificate(signCert);
+        try { yield oSigner.propset_CheckCertificate(true); } catch(_) {}
+
+        // Стратегия 1 — detached (без вложенного содержимого PDF)
+        attempts.push('SignCades detached + Options=CHAIN_EXCEPT_ROOT');
+        try {
+          try { yield oSigner.propset_Options(cadesplugin.CAPICOM_CERTIFICATE_INCLUDE_CHAIN_EXCEPT_ROOT); } catch(_) {}
+          var oSD2 = yield cadesplugin.CreateObjectAsync("CAdESCOM.CadesSignedData");
+          yield oSD2.propset_ContentEncoding(cadesplugin.CADESCOM_BASE64_TO_BINARY);
+          yield oSD2.propset_Content(base64content);
+          var s2 = yield oSD2.SignCades(oSigner, sigType, true);
+          try { yield oStore.Close(); } catch(_) {}
+          return done(s2);
+        } catch(e2) { attempts[attempts.length-1] += ' → ' + self._extractError(e2); }
+
+        // Стратегия 2 — attached (запасной вариант, даёт очень большую подпись)
+        attempts.push('SignCades attached (демо-вариант)');
+        try {
+          var oSD1 = yield cadesplugin.CreateObjectAsync("CAdESCOM.CadesSignedData");
+          yield oSD1.propset_ContentEncoding(cadesplugin.CADESCOM_BASE64_TO_BINARY);
+          yield oSD1.propset_Content(base64content);
+          var s1 = yield oSD1.SignCades(oSigner, sigType);
+          try { yield oStore.Close(); } catch(_) {}
+          return done(s1);
+        } catch(e1) { attempts[attempts.length-1] += ' → ' + self._extractError(e1); }
+
+        // Стратегия 3 — RawSignature.SignHash (для отделённой ГОСТ-подписи)
+        attempts.push('RawSignature.SignHash');
+        try {
+          var hashAlg = cadesplugin.CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_256;
+          try {
+            var pubKey = yield signCert.PublicKey();
+            var algo = yield pubKey.Algorithm;
+            var keyOid = yield algo.Value;
+            if (keyOid === '1.2.643.7.1.1.1.2') hashAlg = cadesplugin.CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_512;
+            else if (keyOid === '1.2.643.2.2.19') hashAlg = cadesplugin.CADESCOM_HASH_ALGORITHM_CP_GOST_3411;
+          } catch(_) {}
+
+          var oHashed = yield cadesplugin.CreateObjectAsync("CAdESCOM.HashedData");
+          yield oHashed.propset_Algorithm(hashAlg);
+          yield oHashed.propset_DataEncoding(cadesplugin.CADESCOM_BASE64_TO_BINARY);
+          yield oHashed.Hash(base64content);
+
+          var oRaw = yield cadesplugin.CreateObjectAsync("CAdESCOM.RawSignature");
+          var s3 = yield oRaw.SignHash(oHashed, signCert);
+          try { yield oStore.Close(); } catch(_) {}
+          return done(s3);
+        } catch(e3) { attempts[attempts.length-1] += ' → ' + self._extractError(e3); }
+
+        throw new Error('Все стратегии подписи провалились:\n• ' + attempts.join('\n• '));
+      } catch(e) {
+        try { if (oStore) yield oStore.Close(); } catch(_) {}
+        fail(self._extractError(e));
+      }
+    });
+  },
+
+  _extractCN: function(subject) {
+    if (!subject) return '';
+    var m = subject.match(/CN\s*=\s*([^,;]+)/i);
+    if (m) return m[1].trim().replace(/^"+|"+$/g, '');
+    var parts = subject.split(/[,;]/);
+    if (parts.length > 0) {
+      var first = parts[0].replace(/^\w+\s*=\s*/, '').trim();
+      return first.replace(/^"+|"+$/g, '');
+    }
+    return '';
+  },
+
+  _extractError: function(e) {
+    if (!e) return 'неизвестная ошибка';
+    if (cadesplugin && typeof cadesplugin.getLastError === 'function') {
+      try {
+        var inner = cadesplugin.getLastError(e);
+        if (inner) return inner;
+      } catch(_) {}
+    }
+    if (e.message) return e.message;
+    return String(e);
+  },
+
+  showResult: function() {
+    var origName = this.state.file.name;
+    var base = origName.replace(/\.[^.]+$/, '');
+    var html;
+    var signedPdfName = base + '_подписанный.pdf';
+    if (this.state.signedPdf) {
+      html =
+        '<div class="result-item">' +
+          '<div><div class="result-name">' + this.escapeHtml(signedPdfName) + '</div>' +
+          '<div class="result-desc">PDF со встроенной подписью (PAdES) — локально в браузере<br>Проверка подписи в Adobe Reader при установленном КриптоПро CSP</div></div>' +
+          '<button class="btn btn-primary btn-sm" onclick="App.downloadSignedPdf()">Скачать PDF</button>' +
+        '</div>';
+    } else {
+      html = '<div style="color:#c62828;font-size:14px">Подпись не сформирована.</div>';
+    }
+    var zipName = base + '_подписанный.zip';
+    html +=
+      '<div class="result-item">' +
+        '<div><div class="result-name">' + this.escapeHtml(zipName) + '</div>' +
+        '<div class="result-desc">PDF + .sig в ZIP-архиве (для проверки в КриптоАРМ / Контур.Крипто)<br>В ZIP-версии нет визуальной печати</div></div>' +
+        '<button class="btn btn-outline btn-sm" onclick="App.downloadZip()">Скачать ZIP</button>' +
+      '</div>';
+    document.getElementById('resultContent').innerHTML = html;
+    document.getElementById('step5').style.display = 'block';
+    document.getElementById('step5').scrollIntoView({ behavior: 'smooth' });
+  },
+
+  downloadSignedPdf: function() {
+    var bytes = this.state.signedPdf;
+    if (!bytes) { this.toast('Подписанный PDF ещё не готов', 'err'); return; }
+    var blob = new Blob([bytes], { type: 'application/pdf' });
+    var origName = this.state.file.name;
+    var base = origName.replace(/\.[^.]+$/, '');
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = base + '_подписанный.pdf';
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+
+  downloadZip: function() {
+    this.toast('Создание ZIP-архива...', '');
+    var self = this;
+    this._createZip(this.state.file, this.state.signature, function(blob) {
+      var fname = self.state.file.name.replace(/\.pdf$/i, '') + '_подписанный.zip';
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = fname;
+      a.click();
+      URL.revokeObjectURL(url);
+    }, function(err) {
+      self.toast('Не удалось создать ZIP: ' + self.escapeHtml(err), 'err');
+    });
+  },
+
+  _createZip: function(pdfFile, sigBase64, done, fail) {
+    if (typeof JSZip === 'undefined') {
+      fail('JSZip не загружен');
+      return;
+    }
+    try {
+      var zip = new JSZip();
+      zip.file(pdfFile.name, pdfFile);
+      var sigName = pdfFile.name + '.sig';
+      zip.file(sigName, sigBase64, { base64: true });
+      zip.generateAsync({ type: 'blob' }).then(done).catch(fail);
+    } catch(e) {
+      fail(String(e));
+    }
+  },
+
+  showStep: function(n) {
+    for (var i = 2; i <= 5; i++) {
+      var el = document.getElementById('step' + i);
+      if (el) el.style.display = i <= n ? 'block' : 'none';
+    }
+  },
+
+  toast: function(msg, type) {
+    var el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast ' + (type || '');
+    setTimeout(function() { el.classList.add('show'); }, 10);
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(function() { el.classList.remove('show'); }, 3500);
+  },
+
+  escapeHtml: function(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  },
+
+  _formatSize: function(bytes) {
+    if (bytes < 1024) return bytes + ' Б';
+    if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' КБ';
+    return (bytes/(1024*1024)).toFixed(1) + ' МБ';
+  }
+};
+
+document.addEventListener('DOMContentLoaded', function() { App.init(); });
+</script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+</body>
+</html>
