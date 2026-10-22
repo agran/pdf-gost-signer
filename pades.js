@@ -135,6 +135,72 @@ PdfReader.prototype._parseChain = function(pos, isTop) {
         var tr = this._parseDict(trStr);
         if (isTop || Object.keys(this.trailer).length === 0) this.trailer = tr;
         if (tr.Prev && parseInt(tr.Prev) > 0) this._parseChain(parseInt(tr.Prev), false);
+    } else if (!xrefFound) {
+        // PDF 1.5+: cross-reference stream (/Type /XRef) — ключи trailer (/Root, /Info,
+        // /Size, /Prev) хранятся в словаре самого xref-объекта по смещению startxref.
+        this._tryXrefStream(pos, isTop);
+    }
+};
+
+// Разбор словаря объекта в позиции pos (например, xref-потока) и использование
+// его в качестве trailer, если классический trailer отсутствует.
+PdfReader.prototype._tryXrefStream = function(pos, isTop) {
+    var dictStr = this._parseObjDictAt(pos);
+    if (!dictStr) return;
+    var tr = this._parseDict(dictStr);
+    if (isTop || Object.keys(this.trailer).length === 0) this.trailer = tr;
+    if (tr.Prev && parseInt(tr.Prev) > 0) this._parseChain(parseInt(tr.Prev), false);
+};
+
+// Извлекает сырую строку первого словаря (между '<<' и '>>' верхнего уровня)
+// объекта по прямому смещению (без обращения к xref).
+PdfReader.prototype._parseObjDictAt = function(pos) {
+    var d = this.data, len = d.length;
+    var objPos = -1;
+    for (var i = Math.max(0, pos); i < Math.min(len, pos + 50); i++) {
+        if (d[i]===0x6f && d[i+1]===0x62 && d[i+2]===0x6a) { objPos = i; break; }
+    }
+    if (objPos < 0) return null;
+    var cStart = skipWs(d, objPos + 3);
+    var cursor = cStart, end = -1;
+    while (cursor < len) {
+        if (d[cursor]===0x3c && d[cursor+1]===0x3c) { cursor += 2; continue; }        // '<<'
+        if (d[cursor]===0x3c) { cursor++; continue; }                                  // '<' hex
+        if (d[cursor]===0x3e && d[cursor+1]===0x3e) { cursor += 2; end = cursor - 2; break; }
+        if (d[cursor]===0x65 && d[cursor+1]===0x6e && d[cursor+2]===0x64 && d[cursor+3]===0x6f && d[cursor+4]===0x62 && d[cursor+5]===0x6a) { // 'endobj'
+            end = cursor; break;
+        }
+        cursor++;
+    }
+    if (end < 0) return null;
+    return arr2str(d, cStart, end).trim();
+};
+
+// Fallback: сбор карты смещений сканированием всех вхождений "N 0 obj".
+// Применяется для объектов, отсутствующих в классической xref (в т.ч. когда
+// таблица xref сжата в stream). Последнее вхождение выигрывает (инкрементальные
+// обновления перекрывают прежние версии объектов).
+PdfReader.prototype._scanObjects = function() {
+    if (this._scanned) return;
+    this._scanned = true;
+    var d = this.data, len = d.length;
+    // Шаблон: <num> <ws> 0 <ws> obj  (число номеров может быть многозначным)
+    for (var i = 0; i + 3 < len; i++) {
+        if (d[i] !== 0x6f || d[i+1] !== 0x62 || d[i+2] !== 0x6a) continue;   // 'obj'
+        if (!isWs(d[i+3])) continue;                                        // разделитель после 'obj'
+        var q = i - 1;                                                      // ws перед '0'
+        if (q < 1 || !isWs(d[q])) continue;
+        if (d[q-1] !== 0x30) continue;                                      // '0'
+        var w = q - 2;                                                      // ws между цифрами и '0'
+        if (w < 0 || !isWs(d[w])) continue;
+        var ds = w - 1;                                                     // последняя цифра
+        while (ds >= 0 && d[ds] >= 0x30 && d[ds] <= 0x39) ds--;
+        var numStart = ds + 1;
+        if (numStart > w - 1) continue;                                     // нет цифр
+        var num = parseInt(arr2str(d, numStart, w), 10);
+        if (!isFinite(num) || num < 0) continue;
+        // Последняя версия объекта выигрывает (инкрементальные обновления)
+        this.xref[num] = numStart;
     }
 };
 PdfReader.prototype._parseXrefEntries = function(pos) {
@@ -168,6 +234,12 @@ PdfReader.prototype._parseXrefEntries = function(pos) {
 };
 PdfReader.prototype.getObjectRaw = function(objNum) {
     var offset = this.xref[objNum];
+    if (offset === undefined) {
+        // Fallback: объект может отсутствовать в классической xref (например, при
+        // xref-потоках). Сканируем файл по паттерну "N 0 obj".
+        this._scanObjects();
+        offset = this.xref[objNum];
+    }
     if (offset === undefined) throw new Error('Object ' + objNum + ' 0 R not found in xref');
     var d = this.data, len = d.length, cursor = offset;
     var objPos = -1;
@@ -338,12 +410,16 @@ PdfReader.prototype._tokenize = function(str) {
     return tokens;
 };
 PdfReader.prototype.parseRef = function(ref) {
+    if (typeof ref !== 'string') {
+        throw new Error('Cannot parse ref: ' + JSON.stringify(ref) + ' (распакованный файл может использовать xref-потоки)');
+    }
     var m = ref.trim().match(/^(\d+)\s+0\s+R$/);
     if (!m) throw new Error('Cannot parse ref: ' + ref);
     return parseInt(m[1]);
 };
 PdfReader.prototype.serializeRef = function(n) { return n + ' 0 R'; };
 PdfReader.prototype.getMaxObjNum = function() {
+    if (!this._scanned) this._scanObjects();
     return Math.max.apply(null, Object.keys(this.xref).map(Number));
 };
 PdfReader.prototype.getTrailer = function() { return this.trailer; };

@@ -648,7 +648,16 @@ var App = {
       document.getElementById('certList').style.display = 'block';
       return;
     }
-    list.sort(function(a, b) { return new Date(b.validTo) - new Date(a.validTo); });
+    var self = this;
+    list.sort(function(a, b) {
+      // По алфавиту по имени владельца (CN), с русскоязычной сортировкой;
+      // при равенстве CN более свежий по сроку сертификат идёт первым.
+      var la = (self._parseSubject(a.subject).CN || a.subject || '');
+      var lb = (self._parseSubject(b.subject).CN || b.subject || '');
+      var cmp = la.localeCompare(lb, 'ru', { sensitivity: 'base', numeric: true });
+      if (cmp !== 0) return cmp;
+      return new Date(b.validTo) - new Date(a.validTo);
+    });
     for (var i = 0; i < list.length; i++) {
       var c = list[i];
       var label = this._parseSubject(c.subject).CN || c.subject;
@@ -691,7 +700,10 @@ var App = {
       '<div>Издатель: <span>' + this.escapeHtml(this._parseSubject(c.issuer).CN || c.issuer) + '</span></div>' +
       '<div>Действителен: <span>' + this.escapeHtml(c.validFrom) + ' — ' + this.escapeHtml(c.validTo) + '</span></div>' +
       '<div style="word-break:break-all">Отпечаток: <span>' + this.escapeHtml(c.thumbprint) + '</span></div>';
-    this.showStep(3);
+    // Не откатывать интерфейс назад: если файл уже выбран, шаг 4 (кнопка
+    // «Подписать») остаётся видимым. showStep(n) скрывает шаги с бóльшими
+    // номерами, поэтому showStep(3) безопасно вызывать только до выбора файла.
+    if (!this.state.file) this.showStep(3);
   },
 
   _parseSubject: function(subject) {
