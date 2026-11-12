@@ -752,6 +752,7 @@ PadesEmbedder.prototype.prepareForSigning = function(pdfBytes, signerName, opts)
             logoInfo = { w: sz.width, h: sz.height, ref: reader.serializeRef(imgNum) };
         }
     }
+    var stNum = newSize++;
 
     var origCat = reader.getRootCatalog();
     var origPg  = reader.getFirstPageDict();
@@ -781,6 +782,14 @@ PadesEmbedder.prototype.prepareForSigning = function(pdfBytes, signerName, opts)
         P: reader.serializeRef(firstPageNum),
         F: 132
     });
+    // Edge не рисует внешний вид виджета подписи — дублируем его Stamp-аннотацией
+    newObjs[stNum] = PdfWriter.serializeDict({
+        Type: '/Annot', Subtype: '/Stamp',
+        Rect: [sigX1, sigY1, sigX2, sigY2],
+        AP: { N: reader.serializeRef(xNum) },
+        P: reader.serializeRef(firstPageNum),
+        F: 132
+    });
 
     var parts = ['/Type /Sig', '/Filter /Adobe.PPKLite', '/SubFilter /ETSI.CAdES.detached'];
     if (signerName) parts.push('/Name ' + PdfWriter.encodePdfString(signerName));
@@ -801,6 +810,8 @@ PadesEmbedder.prototype.prepareForSigning = function(pdfBytes, signerName, opts)
     for (var p1 in origPg) np[p1] = origPg[p1];
     var an = origPg.Annots, annots = [];
     if (an) annots = Array.isArray(an) ? an.slice() : [an];
+    // Stamp под виджетом: клик в Adobe попадает в поле подписи
+    annots.push(reader.serializeRef(stNum));
     annots.push(reader.serializeRef(fNum));
     np.Annots = annots;
     newObjs[firstPageNum] = PdfWriter.serializeDict(np);
