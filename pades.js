@@ -599,6 +599,71 @@ PadesEmbedder.prototype._buildCyrillicFontDict = function() {
     };
 };
 
+PadesEmbedder.prototype._glyphIdFor = function(code) {
+    var gid = PadesFont.cmap[code];
+    if (gid === undefined) gid = PadesFont.cmap[63];
+    return gid === undefined ? 0 : gid;
+};
+
+PadesEmbedder.prototype._glyphHex = function(text) {
+    var h = '';
+    for (var i = 0; i < text.length; i++) {
+        h += ('000' + this._glyphIdFor(text.charCodeAt(i)).toString(16)).slice(-4);
+    }
+    return '<' + h.toUpperCase() + '>';
+};
+
+PadesEmbedder.prototype._textWidth = function(text, size) {
+    var sum = 0;
+    for (var i = 0; i < text.length; i++) sum += PadesFont.widths[this._glyphIdFor(text.charCodeAt(i))] || 0;
+    return sum * size / 1000;
+};
+
+// Шрифт встраиваем целиком в PDF: не все просмотрщики (например, «Мои файлы» на Samsung) подставляют кириллицу вместо Helvetica
+PadesEmbedder.prototype._buildEmbeddedFont = function(base, reader) {
+    var tag = 'PDGSGN+LiberationSans';
+    var ref = function(n) { return reader.serializeRef(n); };
+    var ttf = atob(PadesFont.ttf);
+    var objs = {};
+
+    objs[base] = PdfWriter.serializeDict({
+        Type: '/Font', Subtype: '/Type0', BaseFont: '/' + tag, Encoding: '/Identity-H',
+        DescendantFonts: [ref(base + 1)], ToUnicode: ref(base + 4)
+    });
+    objs[base + 1] = PdfWriter.serializeDict({
+        Type: '/Font', Subtype: '/CIDFontType2', BaseFont: '/' + tag,
+        CIDSystemInfo: { Registry: '(Adobe)', Ordering: '(Identity)', Supplement: 0 },
+        FontDescriptor: ref(base + 2), DW: 1000, W: [0, PadesFont.widths], CIDToGIDMap: '/Identity'
+    });
+    objs[base + 2] = PdfWriter.serializeDict({
+        Type: '/FontDescriptor', FontName: '/' + tag, Flags: 32, FontBBox: PadesFont.bbox,
+        ItalicAngle: 0, Ascent: PadesFont.ascent, Descent: PadesFont.descent,
+        CapHeight: PadesFont.capHeight, StemV: 80, FontFile2: ref(base + 3)
+    });
+    objs[base + 3] = PdfWriter.serializeStream({ Length: ttf.length, Length1: ttf.length }, ttf);
+
+    var byGid = {};
+    Object.keys(PadesFont.cmap).forEach(function(u) {
+        var g = PadesFont.cmap[u], cu = parseInt(u, 10);
+        if (byGid[g] === undefined || cu < byGid[g]) byGid[g] = cu;
+    });
+    var hex4 = function(n) { return ('000' + n.toString(16)).slice(-4).toUpperCase(); };
+    var gids = Object.keys(byGid).map(Number).sort(function(a, b) { return a - b; });
+    var cmap = '/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n' +
+        '/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n' +
+        '/CMapName /Adobe-Identity-UCS def\n/CMapType 2 def\n' +
+        '1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n';
+    for (var i = 0; i < gids.length; i += 100) {
+        var chunk = gids.slice(i, i + 100);
+        cmap += chunk.length + ' beginbfchar\n';
+        for (var j = 0; j < chunk.length; j++) cmap += '<' + hex4(chunk[j]) + '> <' + hex4(byGid[chunk[j]]) + '>\n';
+        cmap += 'endbfchar\n';
+    }
+    cmap += 'endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend';
+    objs[base + 4] = PdfWriter.serializeStream({ Length: cmap.length }, cmap);
+    return objs;
+};
+
 PadesEmbedder.prototype._parseJpegSize = function(bytes) {
     if (!bytes || bytes.length < 4 || bytes[0] !== 0xFF || bytes[1] !== 0xD8) return null;
     var i = 2;
@@ -643,9 +708,17 @@ PadesEmbedder.prototype._formatValidity = function(from, to) {
     return 'с ' + (f || '—') + ' по ' + (t || '—');
 };
 
-PadesEmbedder.prototype._buildAppearanceXObject = function(w, h, info, logo) {
-    var fontRes = { 'Fx1': this._buildCyrillicFontDict() };
+PadesEmbedder.prototype._buildAppearanceXObject = function(w, h, info, logo, fontRef) {
+    var self = this;
+    var emb = !!fontRef;
+    var fontRes = { 'Fx1': emb ? fontRef : this._buildCyrillicFontDict() };
     var fk = '/Fx1';
+    var enc = function(s) { return emb ? self._glyphHex(s) : strToWin1251Literal(s); };
+    var fitSize = function(s, size, maxW) {
+        if (!emb) return size;
+        var tw = self._textWidth(s, size);
+        return tw > maxW ? Math.max(5, size * maxW / tw) : size;
+    };
     var bx = Math.round(w), bh = Math.round(h);
     var pad = 6;
 
@@ -686,12 +759,14 @@ PadesEmbedder.prototype._buildAppearanceXObject = function(w, h, info, logo) {
 
     var t1 = 'ДОКУМЕНТ ПОДПИСАН';
     var t2 = 'ЭЛЕКТРОННОЙ ПОДПИСЬЮ';
-    c += 'BT\n' + fk + ' 9.0 Tf\n0 0 0 rg\n0 0 0 RG 0.3 w 2 Tr\n' +
+    var titleMaxW = bx - titleX - pad;
+    var ts1 = fitSize(t1, 9.0, titleMaxW), ts2 = fitSize(t2, 9.0, titleMaxW);
+    c += 'BT\n' + fk + ' ' + ts1.toFixed(2) + ' Tf\n0 0 0 rg\n0 0 0 RG 0.3 w 2 Tr\n' +
          titleX + ' ' + (bh - 17) + ' Td\n' +
-         strToWin1251Literal(t1) + ' Tj\nET\n';
-    c += 'BT\n' + fk + ' 9.0 Tf\n0 0 0 rg\n0 0 0 RG 0.3 w 2 Tr\n' +
+         enc(t1) + ' Tj\nET\n';
+    c += 'BT\n' + fk + ' ' + ts2.toFixed(2) + ' Tf\n0 0 0 rg\n0 0 0 RG 0.3 w 2 Tr\n' +
          titleX + ' ' + (bh - 28) + ' Td\n' +
-         strToWin1251Literal(t2) + ' Tj\nET\n';
+         enc(t2) + ' Tj\nET\n';
     c += 'BT\n0 Tr\nET\n';
 
     var serial = info.certSerial ? this._formatCertSerial(info.certSerial) : '';
@@ -706,9 +781,11 @@ PadesEmbedder.prototype._buildAppearanceXObject = function(w, h, info, logo) {
     var firstLineY = topY - 13.8;
 
     for (var i = 0; i < lines.length; i++) {
-        c += 'BT\n' + fk + ' ' + infoFontSize + ' Tf\n0 0 0 rg\n' +
+        var lineText = lines[i][0] + lines[i][1];
+        var lineSize = fitSize(lineText, infoFontSize, bx - 2 * pad);
+        c += 'BT\n' + fk + ' ' + lineSize.toFixed(2) + ' Tf\n0 0 0 rg\n' +
              pad + ' ' + (firstLineY - i * step) + ' Td\n' +
-             strToWin1251Literal(lines[i][0] + lines[i][1]) + ' Tj\nET\n';
+             enc(lineText) + ' Tj\nET\n';
     }
     c += 'Q\n';
 
@@ -753,6 +830,12 @@ PadesEmbedder.prototype.prepareForSigning = function(pdfBytes, signerName, opts)
         }
     }
     var stNum = newSize++;
+    var fontObjs = null, fontRef = null;
+    if (typeof PadesFont !== 'undefined') {
+        fontObjs = this._buildEmbeddedFont(newSize, reader);
+        fontRef = reader.serializeRef(newSize);
+        newSize += 5;
+    }
 
     var origCat = reader.getRootCatalog();
     var origPg  = reader.getFirstPageDict();
@@ -798,7 +881,8 @@ PadesEmbedder.prototype.prepareForSigning = function(pdfBytes, signerName, opts)
     parts.push('/M (' + this._formatPdfDate() + ')');
     newObjs[sNum] = '<<\n' + parts.join('\n') + '\n>>';
 
-    newObjs[xNum] = this._buildAppearanceXObject(sigW, sigH, certInfo, logoInfo);
+    newObjs[xNum] = this._buildAppearanceXObject(sigW, sigH, certInfo, logoInfo, fontRef);
+    if (fontObjs) Object.keys(fontObjs).forEach(function(n) { newObjs[n] = fontObjs[n]; });
     if (imgNum) newObjs[imgNum] = this._buildImageXObject(logoBytes, logoInfo.w, logoInfo.h);
 
     var nc = {};

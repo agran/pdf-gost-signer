@@ -99,7 +99,7 @@
 
 ## Визуальная печать
 
-Реализована как Form XObject на первой странице PDF. Шрифт — Type1 Helvetica с кастомной кириллической кодировкой через `/Encoding /Differences` с AFII-именами глифов (afii10017–afii10097).
+Реализована как Form XObject на первой странице PDF. Шрифт встраивается в документ: подмножество Liberation Sans (SIL OFL, файл `pades-font.js`, Type0/CIDFontType2 + ToUnicode), поэтому кириллица одинаково видна в любых просмотрщиках, в том числе в «Мои файлы» на Samsung. Если `pades-font.js` не загружен, используется запасной вариант — Type1 Helvetica без встраивания.
 
 Макет:
 
@@ -127,6 +127,7 @@
 ```text
 ├── index.html          SPA (5 шагов: плагин → сертификат → файл → подпись → результат)
 ├── pades.js            JS-библиотека PAdES — сборка PDF, шрифт, визуальная печать
+├── pades-font.js       Встраиваемое подмножество Liberation Sans (лицензия — LICENSE-LiberationSans.txt)
 └── cadesplugin_api.js  Мост КриптоПро (window.cadesplugin)
 ```
 
