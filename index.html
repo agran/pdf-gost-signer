@@ -127,31 +127,6 @@ select:focus { outline: none; border-color: #16213e; }
 .upload-icon { font-size: 40px; margin-bottom: 8px; }
 .upload-text { font-size: 14px; color: #666; }
 .upload-text strong { color: #16213e; }
-.file-info {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 12px;
-  padding: 10px 14px;
-  background: #f0f2f5;
-  border-radius: 6px;
-  font-size: 13px;
-}
-.file-info .name { font-weight: 500; word-break: break-all; }
-.file-info .size { color: #888; white-space: nowrap; }
-
-.pdf-preview {
-  margin-top: 16px;
-  text-align: center;
-  position: relative;
-  display: inline-block;
-}
-.pdf-preview canvas {
-  max-width: 100%;
-  border: 1px solid #d0d5dd;
-  border-radius: 4px;
-  display: block;
-}
 .sig-overlay {
   position: absolute;
   background: rgba(255,255,255,0.55);
@@ -258,17 +233,15 @@ select:focus { outline: none; border-color: #16213e; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.file-name-input, .batch-name-input {
+.batch-name-input {
   font-size: 13px;
   padding: 6px 10px;
   border: 1.5px solid #d0d5dd;
   border-radius: 6px;
   box-sizing: border-box;
+  flex: 1;
+  min-width: 120px;
 }
-.file-name-input { flex: 1; min-width: 200px; }
-.batch-name-input { flex: 1; min-width: 120px; }
-.file-info-col { width: 100%; }
-.file-info-row { display: flex; align-items: center; gap: 10px; }
 .name-suggestions {
   display: flex;
   flex-wrap: wrap;
@@ -279,20 +252,6 @@ select:focus { outline: none; border-color: #16213e; }
   color: #888;
 }
 .name-suggestions .suggest-btn { padding: 3px 10px; font-size: 12px; }
-
-.mode-toggle {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 400;
-  color: #555;
-  cursor: pointer;
-  user-select: none;
-  white-space: nowrap;
-}
-.mode-toggle input { cursor: pointer; }
 
 .batch-toolbar {
   display: flex;
@@ -339,6 +298,9 @@ select:focus { outline: none; border-color: #16213e; }
 .batch-item-status.err { background: #ffebee; color: #c62828; }
 .batch-summary { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
 .batch-download-all { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.batch-grid--single { grid-template-columns: 1fr; }
+.batch-grid--single .preview-wrap { display: block; width: fit-content; margin: 0 auto; }
+.result-note { margin-top: 12px; font-size: 12px; color: #888; line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -373,22 +335,15 @@ select:focus { outline: none; border-color: #16213e; }
   </div>
 
   <div class="card" id="step3" style="display:none">
-    <div class="card-header"><span class="step-num">3</span> Загрузить документ
-      <label class="mode-toggle">
-        <input type="checkbox" id="batchModeChk" onchange="App.toggleBatchMode()">
-        <span>Пакетный режим: несколько PDF сразу</span>
-      </label>
-    </div>
+    <div class="card-header"><span class="step-num">3</span> Загрузить документы</div>
     <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
       <div class="upload-icon">&#128196;</div>
       <div class="upload-text" id="uploadText">
-        <strong>Выберите файл</strong> или перетащите его сюда<br>
-        PDF до 32 МБ
+        <strong>Выберите файл</strong> (можно сразу несколько) или перетащите сюда<br>
+        PDF до 32 МБ каждый
       </div>
     </div>
-    <input type="file" id="fileInput" accept=".pdf,application/pdf" style="display:none" onchange="App.onFileSelect(event)">
-    <div id="fileInfo" style="display:none"></div>
-    <div id="pdfPreview" class="pdf-preview" style="display:none"><canvas id="pdfCanvas"></canvas></div>
+    <input type="file" id="fileInput" accept=".pdf,application/pdf" multiple style="display:none" onchange="App.onFileSelect(event)">
     <div id="batchPreview" style="display:none"></div>
   </div>
 
@@ -412,7 +367,7 @@ select:focus { outline: none; border-color: #16213e; }
       <span>Добавлять «_подписанный» к имени файла</span>
     </label>
 
-    <button class="btn btn-primary" id="signBtn" style="margin-top:12px" onclick="App.sign()">
+    <button class="btn btn-primary" id="signBtn" style="margin-top:12px" onclick="App.signBatch()">
       Подписать
     </button>
     <div id="batchHint" style="display:none;font-size:12px;color:#888;margin-top:8px">Все PDF будут подписаны по очереди одним сертификатом с той же печатью.</div>
@@ -442,20 +397,12 @@ var App = {
     pluginReady: false,
     certs: [],
     selectedCert: null,
-    file: null,
-    fileBase64: '',
     sigType: 1,
-    signature: '',
-    signing: false,
-    batchMode: false,
     batchFiles: [],
-    batchSigning: false,
-    fileName: ''
+    batchSigning: false
   },
 
   init: function() {
-    this._onSigDragMoveBound = this._onSigDragMove.bind(this);
-    this._onSigDragEndBound = this._onSigDragEnd.bind(this);
     this._onBatchDragMoveBound = this._onBatchDragMove.bind(this);
     this._onBatchDragEndBound = this._onBatchDragEnd.bind(this);
     this.checkPlugin();
@@ -730,20 +677,16 @@ var App = {
 
   onFileSelect: function(event) {
     var files = event.target.files;
-    if (!files || !files.length) return;
-    if (this.state.batchMode) this.handleBatchFiles(files);
-    else this.handleFile(files[0]);
+    if (files && files.length) this.handleBatchFiles(files);
+    event.target.value = '';
   },
 
   _onDrop: function(e) {
     e.preventDefault();
-    var dz = document.getElementById('dropZone');
-    dz.classList.remove('dragover');
+    document.getElementById('dropZone').classList.remove('dragover');
     var self = this;
     this._filesFromDrop(e, function(files) {
-      if (!files || !files.length) return;
-      if (self.state.batchMode) self.handleBatchFiles(files);
-      else self.handleFile(files[0]);
+      if (files && files.length) self.handleBatchFiles(files);
     });
   },
 
@@ -893,20 +836,6 @@ var App = {
     this.toast('Браузер вернул только короткое имя файла (8.3) — впишите настоящее имя в поле под превью', '');
   },
 
-  setFileName: function(v) {
-    v = (v || '').trim();
-    if (!v && this.state.file) v = this.state.file.name;
-    this.state.fileName = v;
-    document.getElementById('dropZone').querySelector('.upload-text').innerHTML =
-      '<strong>' + this.escapeHtml(v) + '</strong><br>' +
-      this._formatSize(this.state.file ? this.state.file.size : 0);
-    document.getElementById('fileInfo').querySelector('.file-name-input').value = v;
-  },
-
-  _currentFileName: function() {
-    return this.state.fileName || (this.state.file ? this.state.file.name : '');
-  },
-
   renameBatchFile: function(i, v) {
     var item = this.state.batchFiles[i];
     if (!item) return;
@@ -923,89 +852,16 @@ var App = {
     if (el) el.innerHTML = '';
   },
 
-  _renderNameSuggestions: function(cands, mode, idx) {
-    var container;
-    if (mode === 'single') {
-      container = document.querySelector('#fileInfo .name-suggestions');
-    } else {
-      container = document.querySelector('#batchPreview .batch-item[data-idx="' + idx + '"] .name-suggestions');
-    }
+  _renderNameSuggestions: function(cands, idx) {
+    var container = document.querySelector('#batchPreview .batch-item[data-idx="' + idx + '"] .name-suggestions');
     if (!container) return;
     var html = '<span>Предложить имя:</span>';
     for (var i = 0; i < cands.length; i++) {
       var v = cands[i];
       var esc = this.escapeHtml(v).replace(/'/g, '&#39;');
-      if (mode === 'single') {
-        html += '<button class="btn btn-outline btn-sm suggest-btn" onclick="App.setFileName(\'' + esc + '\')">' + this.escapeHtml(v) + '</button>';
-      } else {
-        html += '<button class="btn btn-outline btn-sm suggest-btn" onclick="App.applyBatchSuggestion(' + idx + ', \'' + esc + '\')">' + this.escapeHtml(v) + '</button>';
-      }
+      html += '<button class="btn btn-outline btn-sm suggest-btn" onclick="App.applyBatchSuggestion(' + idx + ', \'' + esc + '\')">' + this.escapeHtml(v) + '</button>';
     }
     container.innerHTML = html;
-  },
-
-  handleFile: function(file) {
-    var name = file.name.toLowerCase();
-    if (!name.endsWith('.pdf') && file.type !== 'application/pdf') {
-      this.toast('Поддерживаются только PDF', 'err');
-      return;
-    }
-    if (file.size > 32 * 1024 * 1024) {
-      this.toast('Файл слишком большой. Максимум 32 МБ', 'err');
-      return;
-    }
-    this.state.file = file;
-    this.state.fileName = file.name;
-    this.state._shortWarned = false;
-    this.state.signature = '';
-    document.getElementById('dropZone').classList.add('has-file');
-    document.getElementById('dropZone').querySelector('.upload-text').innerHTML =
-      '<strong>' + this.escapeHtml(file.name) + '</strong><br>' + this._formatSize(file.size);
-    var fi = document.getElementById('fileInfo');
-    fi.style.display = 'block';
-    fi.innerHTML =
-      '<div class="file-info-col">' +
-        '<div class="file-info-row">' +
-          '<input class="file-name-input" value="' + this.escapeHtml(file.name) + '" onchange="App.setFileName(this.value)" title="Имя подписанного файла">' +
-          '<span class="size">' + this._formatSize(file.size) + '</span>' +
-        '</div>' +
-        '<div class="name-suggestions"></div>' +
-      '</div>';
-    this.showStep(4);
-    document.getElementById('step5').style.display = 'none';
-    this._renderPdfPreview(file);
-  },
-
-  toggleBatchMode: function() {
-    this.state.batchMode = document.getElementById('batchModeChk').checked;
-    var input = document.getElementById('fileInput');
-    input.multiple = this.state.batchMode;
-    input.value = '';
-    this.state.file = null;
-    this.state.fileBase64 = '';
-    this.state.signature = '';
-    this.state.signedPdf = null;
-    this.state.batchFiles = [];
-    this.state.batchSigning = false;
-    this.state.fileName = '';
-    var dz = document.getElementById('dropZone');
-    dz.classList.remove('has-file');
-    var t = document.getElementById('uploadText');
-    if (this.state.batchMode) {
-      t.innerHTML = '<strong>Выберите файлы</strong> — можно сразу несколько, или перетащите их сюда<br>' +
-        'PDF до 32 МБ каждый · позицию печати зададите на каждой странице';
-    } else {
-      t.innerHTML = '<strong>Выберите файл</strong> или перетащите его сюда<br>' +
-        'PDF до 32 МБ';
-    }
-    document.getElementById('batchHint').style.display = this.state.batchMode ? 'block' : 'none';
-    document.getElementById('fileInfo').style.display = 'none';
-    document.getElementById('pdfPreview').style.display = 'none';
-    this._clearSigOverlay();
-    var bp = document.getElementById('batchPreview');
-    bp.style.display = 'none';
-    bp.innerHTML = '';
-    this.showStep(3);
   },
 
   handleBatchFiles: function(fileList) {
@@ -1023,10 +879,6 @@ var App = {
       this.toast('Среди выбранных файлов нет подходящих PDF', 'err');
       return;
     }
-    this.state.file = null;
-    this.state.signature = '';
-    this.state.signedPdf = null;
-    this.state.fileName = '';
     this.state._shortWarned = false;
     this.state.batchFiles = valid.map(function(f) {
       return {
@@ -1039,10 +891,11 @@ var App = {
     var dz = document.getElementById('dropZone');
     dz.classList.add('has-file');
     var totalSize = valid.reduce(function(s, f) { return s + f.size; }, 0);
-    document.getElementById('uploadText').innerHTML =
-      '<strong>Выбрано файлов: ' + valid.length + '</strong><br>' + this._formatSize(totalSize) + ' суммарно';
+    document.getElementById('uploadText').innerHTML = valid.length === 1
+      ? '<strong>' + this.escapeHtml(valid[0].name) + '</strong><br>' + this._formatSize(totalSize)
+      : '<strong>Выбрано файлов: ' + valid.length + '</strong><br>' + this._formatSize(totalSize) + ' суммарно';
+    document.getElementById('batchHint').style.display = valid.length > 1 ? 'block' : 'none';
     if (rejected) this.toast('Пропущено ' + rejected + ': не PDF или больше 32 МБ', '');
-    document.getElementById('pdfPreview').style.display = 'none';
     this.showStep(4);
     document.getElementById('step5').style.display = 'none';
     this._renderBatchPreviews();
@@ -1055,12 +908,14 @@ var App = {
     container.innerHTML = '';
     var toolbar = document.createElement('div');
     toolbar.className = 'batch-toolbar';
-    toolbar.innerHTML =
-      '<span>Файлов: ' + self.state.batchFiles.length + ' · перетащите печать в нужное место на каждой странице</span>' +
-      '<button class="btn btn-outline btn-sm" onclick="App.resetAllBatchPositions()">Сбросить все позиции</button>';
+    var many = self.state.batchFiles.length > 1;
+    toolbar.innerHTML = many
+      ? '<span>Файлов: ' + self.state.batchFiles.length + ' · перетащите печать в нужное место на каждой странице</span>' +
+        '<button class="btn btn-outline btn-sm" onclick="App.resetAllBatchPositions()">Сбросить все позиции</button>'
+      : '<span>Перетащите печать в нужное место на странице</span>';
     container.appendChild(toolbar);
     var grid = document.createElement('div');
-    grid.className = 'batch-grid';
+    grid.className = 'batch-grid' + (many ? '' : ' batch-grid--single');
     container.appendChild(grid);
     for (var i = 0; i < self.state.batchFiles.length; i++) {
       grid.appendChild(self._buildBatchItem(i));
@@ -1099,14 +954,16 @@ var App = {
         if (self._isShortName(item.file.name) && item.name === item.file.name) {
           self._findNameCandidates(pdf, function(cands) {
             if (item.name !== item.file.name) return;
-            if (cands.length) self._renderNameSuggestions(cands, 'batch', i);
+            if (cands.length) self._renderNameSuggestions(cands, i);
             else self._warnShortNameOnce();
           });
         }
         pdf.getPage(1).then(function(page) {
           var rawView = page.getViewport({ scale: 1 });
           if (!rawView.width || !rawView.height) { pdf.destroy(); return; }
-          var scale = Math.min(240 / rawView.width, 1.2);
+          var single = self.state.batchFiles.length === 1;
+          var target = single ? Math.min(520, document.getElementById('batchPreview').clientWidth - 24) : 240;
+          var scale = Math.min(target / rawView.width, single ? 1.5 : 1.2);
           var viewport = page.getViewport({ scale: scale });
           canvas.width = viewport.width;
           canvas.height = viewport.height;
@@ -1228,219 +1085,6 @@ var App = {
     el.style.display = 'block';
     el.className = 'batch-item-status' + (isErr ? ' err' : ' ok');
     el.textContent = text;
-  },
-
-  _renderPdfPreview: function(file) {
-    var self = this;
-    var container = document.getElementById('pdfPreview');
-    container.style.display = 'none';
-    this._clearSigOverlay();
-    var reader = new FileReader();
-    reader.onload = function() {
-      var data = new Uint8Array(reader.result);
-      pdfjsLib.getDocument({ data: data }).promise.then(function(pdf) {
-        if (self._isShortName(file.name)) {
-          self._findNameCandidates(pdf, function(cands) {
-            if (self.state.file !== file || self.state.fileName !== file.name) return;
-            if (cands.length) self._renderNameSuggestions(cands, 'single');
-            else self._warnShortNameOnce();
-          });
-        }
-        pdf.getPage(1).then(function(page) {
-          var canvas = document.getElementById('pdfCanvas');
-          var rawView = page.getViewport({ scale: 1 });
-          var pageW = rawView.width;
-          var pageH = rawView.height;
-          var containerWidth = container.parentElement.clientWidth - 48;
-          var scale = Math.min(containerWidth / rawView.width, 1.5);
-          var viewport = page.getViewport({ scale: scale });
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
-          self.state.pageW = pageW;
-          self.state.pageH = pageH;
-          self.state.previewScale = scale;
-          page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise.then(function() {
-            container.style.display = 'block';
-            self._createSigOverlay();
-          }).catch(function() {
-            console.warn('Не удалось отрисовать первую страницу PDF');
-          });
-        }).catch(function() {
-          console.warn('Не удалось открыть PDF для превью');
-        });
-      }).catch(function() {
-        console.warn('Не удалось открыть PDF для превью');
-      });
-    };
-    reader.readAsArrayBuffer(file);
-  },
-
-  _clearSigOverlay: function() {
-    var ov = document.querySelector('#pdfPreview .sig-overlay');
-    if (ov) ov.remove();
-    this._sigDragData = null;
-  },
-
-  _createSigOverlay: function() {
-    var pw = this.state.pageW;
-    var ph = this.state.pageH;
-    var scale = this.state.previewScale;
-    var sigW = Math.min(pw - 80, 204);
-    var sigH = 78;
-    var stampX = 40;
-    var stampY = 40;
-    var ow = Math.round(sigW * scale) || 80;
-    var oh = Math.round(sigH * scale) || 36;
-    var canvasH = Math.round(ph * scale);
-    var left = Math.round(stampX * scale);
-    var top = canvasH - Math.round((stampY + sigH) * scale);
-    this.state.stampW = sigW;
-    this.state.stampH = sigH;
-    this.state.stampX = stampX;
-    this.state.stampY = stampY;
-    var container = document.getElementById('pdfPreview');
-    var div = document.createElement('div');
-    div.className = 'sig-overlay';
-    div.style.left = left + 'px';
-    div.style.top = top + 'px';
-    div.style.width = ow + 'px';
-    div.style.height = oh + 'px';
-    div.innerHTML = '<span class="sig-label">Печать<br>подписи</span>';
-    div.addEventListener('mousedown', this._onSigDragStart.bind(this));
-    container.appendChild(div);
-  },
-
-  _onSigDragStart: function(e) {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    var overlay = e.currentTarget;
-    this._sigDragData = {
-      el: overlay,
-      startMouseX: e.clientX,
-      startMouseY: e.clientY,
-      startLeft: parseFloat(overlay.style.left),
-      startTop: parseFloat(overlay.style.top)
-    };
-    overlay.style.opacity = '0.8';
-    overlay.style.zIndex = '20';
-    document.addEventListener('mousemove', this._onSigDragMoveBound);
-    document.addEventListener('mouseup', this._onSigDragEndBound);
-  },
-
-  _onSigDragMove: function(e) {
-    if (!this._sigDragData) return;
-    e.preventDefault();
-    var d = this._sigDragData;
-    var canvas = document.getElementById('pdfCanvas');
-    var maxLeft = canvas.width - d.el.offsetWidth;
-    var maxTop = canvas.height - d.el.offsetHeight;
-    var newLeft = Math.max(0, Math.min(d.startLeft + e.clientX - d.startMouseX, maxLeft));
-    var newTop = Math.max(0, Math.min(d.startTop + e.clientY - d.startMouseY, maxTop));
-    d.el.style.left = newLeft + 'px';
-    d.el.style.top = newTop + 'px';
-    var scale = this.state.previewScale;
-    var sigH = this.state.stampH;
-    this.state.stampX = Math.round(newLeft / scale);
-    this.state.stampY = Math.round((canvas.height - newTop - d.el.offsetHeight) / scale);
-    var label = d.el.querySelector('.sig-label');
-    if (label) label.innerHTML = 'Печать<br>подписи<br><span class="sig-coords">X:' + this.state.stampX + ' Y:' + this.state.stampY + '</span>';
-  },
-
-  _onSigDragEnd: function() {
-    if (!this._sigDragData) return;
-    this._sigDragData.el.style.opacity = '';
-    this._sigDragData.el.style.zIndex = '10';
-    this._sigDragData = null;
-    document.removeEventListener('mousemove', this._onSigDragMoveBound);
-    document.removeEventListener('mouseup', this._onSigDragEndBound);
-    var label = document.querySelector('#pdfPreview .sig-label');
-    if (label) label.innerHTML = 'Печать<br>подписи';
-  },
-
-  sign: function() {
-    var self = this;
-    if (this.state.signing) return;
-    if (this.state.batchMode && this.state.batchFiles.length) { this.signBatch(); return; }
-    if (!this.state.file) { this.toast('Сначала выберите файл', 'err'); return; }
-    if (!this.state.selectedCert) { this.toast('Сначала выберите сертификат', 'err'); return; }
-
-    this.state.signing = true;
-    var btn = document.getElementById('signBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Подписание...';
-    var pbar = document.getElementById('progressBar');
-    var pfill = document.getElementById('progressFill');
-    pbar.style.display = 'block';
-    pfill.style.width = '0%';
-
-    var done = function() {
-      pfill.style.width = '100%';
-      pbar.style.display = 'none';
-      btn.disabled = false;
-      btn.innerHTML = 'Подписать';
-      self.state.signing = false;
-      self.showResult();
-    };
-    var fail = function(err) {
-      pbar.style.display = 'none';
-      btn.disabled = false;
-      btn.innerHTML = 'Подписать';
-      self.state.signing = false;
-      console.error('[sign error]', err);
-      self.toast('Ошибка подписания:\n' + String(err), 'err');
-    };
-
-    pfill.style.width = '10%';
-    var reader = new FileReader();
-    reader.onload = function() {
-        pfill.style.width = '30%';
-        var pdfBytes = new Uint8Array(reader.result);
-        var pdfStr = '';
-        for (var b = 0; b < pdfBytes.length; b++) pdfStr += String.fromCharCode(pdfBytes[b]);
-        var embedder = new PadesJs.PadesEmbedder();
-        var prep;
-        try {
-          prep = embedder.prepareForSigning(
-            pdfStr,
-            self._extractCN(self.state.selectedCert.subject),
-            {
-              logoBytes:  self.state.logoBytes,
-              certSerial: self.state.selectedCert.serial,
-              validFrom:  self.state.selectedCert.validFrom,
-              validTo:    self.state.selectedCert.validTo,
-              stampX:     self.state.stampX,
-              stampY:     self.state.stampY
-            }
-          );
-        } catch(e) { fail('Ошибка сборки PAdES: ' + e.message); return; }
-
-        pfill.style.width = '50%';
-        var dataB64 = btoa(prep.dataToSign);
-        self._doSign(dataB64, self.state.selectedCert, self.state.sigType, function(signature) {
-          try {
-            var signedPdfStr = embedder.finalizeSignature(prep.state, signature);
-            var signedBytes = new Uint8Array(signedPdfStr.length);
-            for (var s = 0; s < signedPdfStr.length; s++) signedBytes[s] = signedPdfStr.charCodeAt(s);
-            self.state.signedPdf = signedBytes;
-            self.state.signature = signature;
-            done();
-          } catch(e2) { fail('Ошибка встраивания: ' + e2.message); }
-        }, fail);
-      };
-      reader.onerror = function() { fail('Не удалось прочитать файл'); };
-      reader.readAsArrayBuffer(self.state.file);
-    },
-
-  _readFileBase64: function(file, done, fail) {
-    var reader = new FileReader();
-    reader.onload = function() {
-      var full = reader.result;
-      var comma = full.indexOf(',');
-      var b64 = comma >= 0 ? full.substring(comma + 1) : full;
-      done(b64.replace(/\s/g, ''));
-    };
-    reader.onerror = function() { fail('Не удалось прочитать файл'); };
-    reader.readAsDataURL(file);
   },
 
   _doSign: function(base64content, cert, sigType, done, fail) {
@@ -1651,43 +1295,17 @@ var App = {
 
   refreshResult: function() {
     if (document.getElementById('step5').style.display === 'none') return;
-    if (this.state.batchMode && this.state.batchFiles.length) this.showBatchResult(true);
-    else if (this.state.signedPdf) this.showResult(true);
-  },
-
-  showResult: function(noScroll) {
-    var origName = this._currentFileName();
-    var base = origName.replace(/\.[^.]+$/, '');
-    var html;
-    var signedPdfName = base + this._suffix() + '.pdf';
-    if (this.state.signedPdf) {
-      html =
-        '<div class="result-item">' +
-          '<div><div class="result-name">' + this.escapeHtml(signedPdfName) + '</div>' +
-          '<div class="result-desc">PDF со встроенной подписью (PAdES) — локально в браузере<br>Проверка подписи в Adobe Reader при установленном КриптоПро CSP</div></div>' +
-          '<button class="btn btn-primary btn-sm" onclick="App.downloadSignedPdf()">Скачать PDF</button>' +
-        '</div>';
-    } else {
-      html = '<div style="color:#c62828;font-size:14px">Подпись не сформирована.</div>';
-    }
-    var zipName = base + this._suffix() + '.zip';
-    html +=
-      '<div class="result-item">' +
-        '<div><div class="result-name">' + this.escapeHtml(zipName) + '</div>' +
-        '<div class="result-desc">PDF + .sig в ZIP-архиве (для проверки в КриптоАРМ / Контур.Крипто)<br>В ZIP-версии нет визуальной печати</div></div>' +
-        '<button class="btn btn-outline btn-sm" onclick="App.downloadZip()">Скачать ZIP</button>' +
-      '</div>';
-    document.getElementById('resultContent').innerHTML = html;
-    document.getElementById('step5').style.display = 'block';
-    if (!noScroll) document.getElementById('step5').scrollIntoView({ behavior: 'smooth' });
+    if (this.state.batchFiles.length) this.showBatchResult(true);
   },
 
   showBatchResult: function(noScroll) {
     var files = this.state.batchFiles;
     var ok = files.filter(function(f) { return f.status === 'ok'; });
     var bad = files.filter(function(f) { return f.status !== 'ok'; });
-    var html = '<div class="batch-summary">Подписано: ' + ok.length + ' из ' + files.length +
-      (bad.length ? ' · с ошибками: ' + bad.length : '') + '</div>';
+    var html = files.length > 1 || bad.length
+      ? '<div class="batch-summary">Подписано: ' + ok.length + ' из ' + files.length +
+        (bad.length ? ' · с ошибками: ' + bad.length : '') + '</div>'
+      : '';
     if (ok.length > 1) {
       html += '<div class="batch-download-all">' +
         '<button class="btn btn-primary btn-sm" onclick="App.downloadBatchAllPdf()">Скачать все PDF (ZIP)</button>' +
@@ -1713,28 +1331,14 @@ var App = {
           '</div>';
       }
     }
+    if (ok.length) {
+      html += '<div class="result-note">PDF — документ со встроенной подписью (PAdES), подпись и печать созданы локально в браузере. ' +
+        'PDF+.sig — ZIP с исходным PDF и отделённой подписью для КриптоАРМ / Контур.Крипто (визуальной печати в нём нет). ' +
+        'Проверка подписи в Adobe Reader — при установленном КриптоПро CSP.</div>';
+    }
     document.getElementById('resultContent').innerHTML = html;
     document.getElementById('step5').style.display = 'block';
     if (!noScroll) document.getElementById('step5').scrollIntoView({ behavior: 'smooth' });
-  },
-
-  downloadSignedPdf: function() {
-    var bytes = this.state.signedPdf;
-    if (!bytes) { this.toast('Подписанный PDF ещё не готов', 'err'); return; }
-    var blob = new Blob([bytes], { type: 'application/pdf' });
-    var base = this._currentFileName().replace(/\.[^.]+$/, '');
-    this._saveBlob(blob, base + this._suffix() + '.pdf');
-  },
-
-  downloadZip: function() {
-    this.toast('Создание ZIP-архива...', '');
-    var self = this;
-    this._createZip(this.state.file, this.state.signature, function(blob) {
-      var fname = self._currentFileName().replace(/\.pdf$/i, '') + self._suffix() + '.zip';
-      self._saveBlob(blob, fname);
-    }, function(err) {
-      self.toast('Не удалось создать ZIP: ' + self.escapeHtml(err), 'err');
-    }, self._currentFileName());
   },
 
   downloadBatchPdf: function(i) {
